@@ -1,3 +1,5 @@
+import time
+
 from aegis.models import TelemetrySnapshot
 from aegis.tier1_senses.telemetry import TelemetryHub
 from aegis.tier1_senses.watchdog import HardwareWatchdog, WatchdogLimits
@@ -12,6 +14,23 @@ def test_telemetry_sample_shape():
     assert 0 <= snap.cpu_percent <= 100
     assert snap.ram_total_gb >= 0
     assert hub.latest is snap
+
+
+def test_telemetry_streaming_lifecycle():
+    hub = TelemetryHub(interval=0.02)
+    received: list[TelemetrySnapshot] = []
+    hub.subscribe(received.append)
+    hub.start()
+    try:
+        deadline = time.time() + 2.0
+        while len(received) < 2 and time.time() < deadline:
+            time.sleep(0.02)
+    finally:
+        hub.stop()
+    assert len(received) >= 2
+    assert all(isinstance(s, TelemetrySnapshot) for s in received)
+    # stop() is idempotent and leaves no live thread
+    hub.stop()
 
 
 def test_watchdog_trips_after_sustained_breach():

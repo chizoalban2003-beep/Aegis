@@ -69,6 +69,18 @@ def test_budget_overrun_is_vetoed_even_if_useful():
     assert d.action is DecisionAction.VETO
 
 
+def test_marginal_zone2_consult_keeps_pivot_suggestion():
+    """A marginal (NEGOTIATE-band) trade in Zone 2 escalates to CONSULT but must
+    still carry the cheaper-method suggestion for the Governor's proposal."""
+    cee = ContextualEquivalenceEngine()
+    ins = Instruction(description="tweak", zone=Zone.SYSTEM_SPACE, utility=0.2,
+                      cost=ResourceCost(ram_gb=1, est_seconds=10, cpu_load=10))
+    d = cee.evaluate(ins, idle())
+    assert d.action is DecisionAction.CONSULT
+    assert 0.7 <= d.ratio < 1.0
+    assert d.suggested_alternative
+
+
 @pytest.mark.parametrize("zone,expected", [
     (Zone.USER_SPACE, DecisionAction.EXECUTE),
     (Zone.SYSTEM_SPACE, DecisionAction.CONSULT),
