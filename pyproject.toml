@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "project-aegis"
+version = "0.1.0"
+description = "Aegis — a sovereign, local-first algorithmic execution daemon (the Sovereign Symbiote)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "The Governor" }]
+keywords = ["agent", "local-first", "sovereign", "automation", "vla", "telemetry"]
+dependencies = [
+    "pydantic>=2,<3",
+    "psutil>=5.9",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+desktop = ["pyautogui>=0.9.54"]   # real mouse/keyboard actuation (needs a GUI session)
+gpu = ["nvidia-ml-py>=12"]        # NVIDIA GPU utilisation telemetry
+vector = ["chromadb>=0.5"]        # production local vector store for the DNA memory
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+aegis = "aegis.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["aegis*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

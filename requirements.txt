@@ -1,0 +1,16 @@
+# Project Aegis — core runtime dependencies (strictly local; no cloud SDKs).
+# Pin to compatible ranges; install with:  pip install -r requirements.txt
+pydantic>=2,<3        # strict typing for models + PIPNB governance
+psutil>=5.9           # cross-platform hardware telemetry (Tier 1)
+fastapi>=0.110        # localhost-only control surface
+uvicorn>=0.29         # ASGI server for the control surface
+
+# --- Optional extras (see pyproject.toml [project.optional-dependencies]) ---
+# Desktop GUI actuation (requires a desktop session):
+#   pip install "pyautogui>=0.9.54"
+# NVIDIA GPU telemetry:
+#   pip install "nvidia-ml-py>=12"
+# Production local vector store for the DNA memory:
+#   pip install "chromadb>=0.5"
+# Dev / test:
+#   pip install "pytest>=8" "httpx>=0.27"
