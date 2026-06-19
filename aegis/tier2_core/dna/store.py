@@ -17,6 +17,7 @@ import hashlib
 import json
 import math
 import sqlite3
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -89,7 +90,12 @@ class DNAStore:
     def __init__(self, path: str | Path = ":memory:", cipher: Optional[Cipher] = None) -> None:
         self.path = str(path)
         self.cipher = cipher or Cipher()
-        self._conn = sqlite3.connect(self.path)
+        # The daemon is concurrent (telemetry thread + threadpool-served API), so
+        # the DNA memory is written from many threads. A single sqlite connection
+        # is not safe for concurrent use, so we open it cross-thread and serialise
+        # every access behind a lock.
+        self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        self._lock = threading.Lock()
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS dna ("
             " id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -104,15 +110,17 @@ class DNAStore:
             {"kind": record.kind, "description": record.description, "payload": record.payload, "ts": record.ts}
         )
         blob = self.cipher.encrypt(doc)
-        cur = self._conn.execute(
-            "INSERT INTO dna (kind, ts, blob) VALUES (?, ?, ?)",
-            (record.kind, record.ts, blob),
-        )
-        self._conn.commit()
-        return int(cur.lastrowid)
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO dna (kind, ts, blob) VALUES (?, ?, ?)",
+                (record.kind, record.ts, blob),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
 
     def _all(self) -> list[CrystalRecord]:
-        rows = self._conn.execute("SELECT blob FROM dna ORDER BY ts DESC").fetchall()
+        with self._lock:
+            rows = self._conn.execute("SELECT blob FROM dna ORDER BY ts DESC").fetchall()
         out: list[CrystalRecord] = []
         for (blob,) in rows:
             # A single corrupt row, or one written under a different key, must not
@@ -144,7 +152,9 @@ class DNAStore:
         return scored[:top_k]
 
     def count(self) -> int:
-        return int(self._conn.execute("SELECT COUNT(*) FROM dna").fetchone()[0])
+        with self._lock:
+            return int(self._conn.execute("SELECT COUNT(*) FROM dna").fetchone()[0])
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
