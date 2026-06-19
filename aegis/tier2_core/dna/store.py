@@ -115,8 +115,20 @@ class DNAStore:
         rows = self._conn.execute("SELECT blob FROM dna ORDER BY ts DESC").fetchall()
         out: list[CrystalRecord] = []
         for (blob,) in rows:
-            doc = json.loads(self.cipher.decrypt(blob))
-            out.append(CrystalRecord(kind=doc["kind"], description=doc["description"], payload=doc["payload"], ts=doc["ts"]))
+            # A single corrupt row, or one written under a different key, must not
+            # take down the whole memory: skip what we cannot decrypt/parse.
+            try:
+                doc = json.loads(self.cipher.decrypt(blob))
+                out.append(
+                    CrystalRecord(
+                        kind=doc["kind"],
+                        description=doc["description"],
+                        payload=doc["payload"],
+                        ts=doc["ts"],
+                    )
+                )
+            except (UnicodeDecodeError, ValueError, KeyError):
+                continue
         return out
 
     def search(self, query: str, *, kind: Optional[str] = None, top_k: int = 5) -> list[CrystalRecord]:

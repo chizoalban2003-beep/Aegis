@@ -7,6 +7,7 @@ sits *below* the CEE: no trade can ever talk it out of protecting the hardware.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -27,11 +28,15 @@ class HardwareWatchdog:
         self._breaches = 0
         self.tripped = False
         self.reason: Optional[str] = None
+        # The watchdog is fed from both the telemetry thread and the daemon's
+        # submit() path, so guard its counter/state.
+        self._lock = threading.Lock()
 
     def reset(self) -> None:
-        self._breaches = 0
-        self.tripped = False
-        self.reason = None
+        with self._lock:
+            self._breaches = 0
+            self.tripped = False
+            self.reason = None
 
     def inspect(self, telemetry: TelemetrySnapshot) -> bool:
         """Feed a snapshot. Returns True if the watchdog is currently tripped."""
@@ -41,13 +46,19 @@ class HardwareWatchdog:
         elif telemetry.ram_percent >= self.limits.max_ram_percent:
             breach = f"RAM pressure {telemetry.ram_percent:.1f}% ≥ {self.limits.max_ram_percent:.1f}%"
 
-        if breach:
-            self._breaches += 1
-            if self._breaches >= self.limits.sustained_breaches and not self.tripped:
-                self.tripped = True
-                self.reason = breach
-                if self._on_trip:
-                    self._on_trip(breach)
-        else:
-            self._breaches = 0
-        return self.tripped
+        fire: Optional[str] = None
+        with self._lock:
+            if breach:
+                self._breaches += 1
+                if self._breaches >= self.limits.sustained_breaches and not self.tripped:
+                    self.tripped = True
+                    self.reason = breach
+                    fire = breach
+            else:
+                self._breaches = 0
+            tripped = self.tripped
+
+        # Invoke the callback outside the lock to avoid re-entrancy deadlocks.
+        if fire is not None and self._on_trip:
+            self._on_trip(fire)
+        return tripped

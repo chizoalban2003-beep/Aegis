@@ -183,8 +183,11 @@ class ContextualEquivalenceEngine:
         outcome = self.zone_gate.escalate(instruction, base_action)
         reasons += outcome.reasons
 
+        # Preserve the cheaper-method suggestion for any marginal trade, even when
+        # the zone gate escalates it to CONSULT/PENDING_APPROVAL — the Governor's
+        # proposal should still carry the proposed pivot.
         suggested = None
-        if outcome.action is DecisionAction.NEGOTIATE:
+        if base_action is DecisionAction.NEGOTIATE:
             suggested = self._cheaper_alternative(instruction)
 
         return Decision(
