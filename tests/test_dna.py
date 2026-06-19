@@ -1,3 +1,5 @@
+import concurrent.futures as cf
+
 from aegis.tier2_core.dna.store import CrystalRecord, DNAStore, XorCipher
 
 
@@ -37,6 +39,26 @@ def test_dna_persists_to_disk_and_reopens(tmp_path):
     assert s2.count() == 1
     assert s2.search("sales report")[0].description.startswith("export")
     s2.close()
+
+
+def test_dna_concurrent_writes_are_thread_safe(tmp_path):
+    """The DNA store is written from many threads (telemetry + threadpool API);
+    concurrent access must not raise sqlite cross-thread errors."""
+    store = DNAStore(tmp_path / "dna.sqlite3", cipher=XorCipher("k"))
+    errors: list[str] = []
+
+    def worker(i: int) -> None:
+        try:
+            store.remember(CrystalRecord(kind="trade", description=f"task {i}"))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(repr(exc))
+
+    with cf.ThreadPoolExecutor(max_workers=16) as ex:
+        list(ex.map(worker, range(300)))
+
+    assert errors == []
+    assert store.count() == 300
+    store.close()
 
 
 def test_dna_wrong_key_does_not_crash_retrieval(tmp_path):

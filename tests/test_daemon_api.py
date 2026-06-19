@@ -46,6 +46,35 @@ def test_submit_vetoes_when_watchdog_tripped(tmp_path):
     d.stop()
 
 
+def test_concurrent_submit_is_thread_safe(tmp_path):
+    """uvicorn serves sync endpoints from a threadpool, so submit() runs
+    concurrently across threads; it must not raise and must record every trade."""
+    import concurrent.futures as cf
+
+    d = _daemon(tmp_path)
+    errors: list[str] = []
+    actions: list[str] = []
+
+    def worker(i: int) -> None:
+        try:
+            dec = d.submit(
+                Instruction(description=f"task{i}", utility=0.9,
+                            cost=ResourceCost(ram_gb=1, est_seconds=5, cpu_load=5)),
+                telemetry=idle(),
+            )
+            actions.append(dec.action.value)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(repr(exc))
+
+    with cf.ThreadPoolExecutor(max_workers=16) as ex:
+        list(ex.map(worker, range(300)))
+
+    assert errors == []
+    assert actions.count("execute") == 300
+    assert d.dna.count() == 300
+    d.stop()
+
+
 def test_api_endpoints(tmp_path):
     from fastapi.testclient import TestClient
 
