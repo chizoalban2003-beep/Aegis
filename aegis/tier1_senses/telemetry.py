@@ -9,7 +9,6 @@ treated as "unknown / idle" by the CEE.
 from __future__ import annotations
 
 import threading
-import time
 from typing import Callable, Optional
 
 from aegis.models import TelemetrySnapshot
